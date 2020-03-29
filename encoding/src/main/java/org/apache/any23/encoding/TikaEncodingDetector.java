@@ -62,6 +62,13 @@ public class TikaEncodingDetector implements EncodingDetector {
     private static final byte[] TAG_BYTES = TAG_CHARS.getBytes(UTF_8);
     private static final Node[] EMPTY_NODES = new Node[0];
 
+//    private static boolean usesNaturalLanguageProcessingForDetection(String charset) {
+//        switch (charset) {
+//            case "Shift_JIS":
+//            case "GB18030":
+//        }
+//    }
+
     private static Charset guessEncoding(InputStream is, Charset declared) throws IOException {
         if (!is.markSupported()) {
             is = new BufferedInputStream(is);
@@ -104,6 +111,22 @@ public class TikaEncodingDetector implements EncodingDetector {
             // All characters are plain ASCII, so it doesn't matter what we choose.
             return UTF_8;
         }
+
+        //TODO:
+        // 1. the ISO-2022 family of encodings (ISO-2022-CN, ISO-2022-JP, ISO-2022-KR)
+        //    use number of escape sequences to determine best match, NOT ngrams.
+        // 2. The UTF-16 & UTF-32 family of encodings use the structure of code units
+        //    to determine best match, NOT ngrams.
+        // 3. If charset match has a lang, can conclude it used natural language processing to figure out lang;
+        //    for the charsets listed above, lang is null!
+        //    Lang is also present on IBM500, which is not ascii compatible.
+        //    So, conditions accepting a charset match after stripping tags should be:
+        //        (1) lang is present
+        //        (2) ascii compatible
+        //    Conditions for accepting a charset after *not* stripping tags should be:
+        //        (1) not enough tags to strip OR (2) lang is not present OR (3) ascii incompatible
+
+
 
         //HTML & XML tag-stripping is vital for accurate n-gram detection, so use Jsoup instead of icu4j's
         // "quick and dirty, not 100% accurate" tag-stripping implementation for more accurate results.

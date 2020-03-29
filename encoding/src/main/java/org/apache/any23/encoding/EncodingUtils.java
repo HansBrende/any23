@@ -18,6 +18,7 @@
 package org.apache.any23.encoding;
 
 import org.apache.tika.detect.TextStatistics;
+import org.apache.tika.parser.txt.CharsetDetector;
 import org.apache.tika.utils.CharsetUtils;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Evaluator;
@@ -27,15 +28,126 @@ import org.rypt.f8.Utf8Statistics;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * @author Hans Brende
  */
 class EncodingUtils {
+
+    private static final String TAG_CHARS = "< />";
+    private static final byte[] TAG_BYTES = TAG_CHARS.getBytes(UTF_8);
+
+    public static void main(String[] args) throws Exception {
+        ArrayList<String> asciiCompatible = new ArrayList<>();
+        ArrayList<String> tagCompatible = new ArrayList<>();
+        ArrayList<String> charsetsWithMin1byte = new ArrayList<>();
+        ArrayList<String> others = new ArrayList<>();
+
+        Arrays.asList(CharsetDetector.getAllDetectableCharsets()).forEach(cs -> {
+            Charset c;
+            try {
+                c = Charset.forName(cs);
+            } catch (Exception e) {
+                System.out.println(cs + ": UNSUPPORTED");
+                return;
+            }
+
+            if (true) {
+                //CharsetEncoder ce = c.newEncoder();
+
+                try {
+
+                    ArrayList<Integer> badAscii = new ArrayList<>();
+                    ArrayList<Integer> goodAscii = new ArrayList<>();
+
+                    for (char i = 0; i < 128; i++) {
+                        if (!new String(new char[]{i}).equals(new String(new byte[]{(byte)i}, c))) {
+                            badAscii.add((int)i);
+                        } else {
+                            goodAscii.add((int)i);
+                        }
+                    }
+//                    char[] asciiChars = new char[128];
+//                    byte[] asciiBytes = new byte[128];
+//                    for (char i = 0; i < 128; i++) {
+//                        asciiChars[i] = i;
+//                        asciiBytes[i] = (byte)i;
+//                    }
+//
+//                    char[] printableAsciiChars = new char[127 - 32];
+//                    for (char i = 0; i < printableAsciiChars.length; i++) {
+//                        printableAsciiChars[i]
+//                    }
+//
+//                    String ascii = new String(asciiChars);
+                    if (badAscii.size() == 0) {
+                        asciiCompatible.add(cs);
+                    } else if (TAG_CHARS.equals(new String(TAG_BYTES, c))) {
+                        tagCompatible.add(cs + " (bad ascii: " + badAscii + ")");
+                    } else if (c.canEncode()) {
+                        int minLen = Integer.MAX_VALUE;
+                        int maxLen = 0;
+                        CharsetEncoder ce = c.newEncoder();
+                        for (int i = 0; i <= Character.MAX_CODE_POINT; i++) {
+                            if (ce.canEncode(new String(Character.toChars(i)))) {
+                                int len = ce.encode(CharBuffer.wrap(Character.toChars(i))).remaining();
+
+                                minLen = Math.min(minLen, len);
+                                maxLen = Math.max(maxLen, len);
+                            }
+                        }
+                        if (minLen == 1) {
+                            charsetsWithMin1byte.add(cs + " (good ascii: " + goodAscii + ")");
+                        } else {
+                            others.add(cs);
+                        }
+                    } else {
+                        System.out.println("CANNOT ENCODE AND NOT ASCII OR TAG COMPATIBLE: " + cs);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println(cs + ": CANNOT ENCODE");
+            }
+
+        });
+
+        System.out.println();
+        System.out.println("ascii compatible: " + asciiCompatible);
+        System.out.println();
+        System.out.println("tag compatible: " + tagCompatible);
+        System.out.println();
+        System.out.println("min 1 byte: " + charsetsWithMin1byte);
+        System.out.println();
+        System.out.println(others);
+    }
+
+    // Prints:
+    //ISO-8859-8-I: UNSUPPORTED
+    //IBM424_rtl: UNSUPPORTED
+    //IBM424_ltr: UNSUPPORTED
+    //IBM420_rtl: UNSUPPORTED
+    //IBM420_ltr: UNSUPPORTED
+    //
+    //ascii compatible: [UTF-8, Shift_JIS, GB18030, EUC-JP, EUC-KR, Big5, ISO-8859-1, ISO-8859-2, ISO-8859-5, ISO-8859-6, ISO-8859-7, ISO-8859-8, windows-1251, windows-1256, KOI8-R, ISO-8859-9, IBM866]
+    //
+    //tag compatible: [ISO-2022-JP (bad ascii: [14, 15, 27]), ISO-2022-CN (bad ascii: [14, 15, 27]), ISO-2022-KR (bad ascii: [14, 15, 27])]
+    //
+    //min 1 byte: [IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31]), IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31]), IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31]), IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31]), IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31]), IBM500 (good ascii: [0, 1, 2, 3, 11, 12, 13, 14, 15, 16, 17, 18, 19, 24, 25, 28, 29, 30, 31])]
+    //
+    //[UTF-16BE, UTF-16LE, UTF-32BE, UTF-32LE]
 
     /**
      * Very efficient method to convert an input stream directly to an ISO-8859-1 encoded string
@@ -72,6 +184,10 @@ class EncodingUtils {
                         //ignore
                     }
                 }
+                // TODO should we really flip to 15 if declared otherwise?
+                // TODO since 15 isn't standard, flip all characters are common to both
+                // TODO \r > \n / 2
+                // TODO where is ISO-8859-15 in this switch?
                 return iso_8859_1_or_15(stats);
             case "windows-1252":
                 return hasNoneOf(stats, windows1252Illegals) ? charset : iso_8859_1_or_15(stats);
